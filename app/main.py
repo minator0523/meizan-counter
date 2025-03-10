@@ -26,12 +26,13 @@ def health():
 
 @app.get("/pois")
 def get_pois(conn=Depends(get_connection)):
+    # OK
     """
     PoIテーブルの地物をGeoJSONとして返す
     """
     with conn.cursor() as cur:
         cur.execute(
-            "ogc_fid as id, no, name, ST_X(geom) as longitude, ST_Y(geom) as latitude, elevation, count  FROM meizan"
+            "SELECT id, name, ST_X(geom) as longitude, ST_Y(geom) as latitude, elevation, count FROM meizan"
         )
         res = cur.fetchall()
 
@@ -46,10 +47,11 @@ def get_pois(conn=Depends(get_connection)):
             "properties": {
                 "id": id,
                 "name": name,
+                "elevation": elevation,
+                "count": count,
             },
         }
-        for id, name, longitude, latitude in res
-        print(id, name, longitude, latitude)
+        for id, name, longitude, latitude, elevation, count in res
     ]
 
     # GeoJSON-FeatureCollectionとしてレスポンス
@@ -63,12 +65,13 @@ def get_pois(conn=Depends(get_connection)):
 def get_pois_sql(conn=Depends(get_connection)):
     """
     PoIテーブルの地物をGeoJSONとして返す。GeoJSON-FeatureはSQLで生成
+    OK
     """
     import json
 
     with conn.cursor() as cur:
         # As Geojson
-        cur.execute("SELECT ST_AsGeoJSON(poi.*) FROM poi")
+        cur.execute("SELECT ST_AsGeoJSON(meizan.*) FROM meizan")
         res = cur.fetchall()
 
     # res[n][0] でGeoJSON形式の文字列が得られる
@@ -86,6 +89,7 @@ def get_pois_sql(conn=Depends(get_connection)):
 @app.get("/pois_sql2")
 def get_pois_sql2(bbox: str, conn=Depends(get_connection)):
     """
+    OK
     PoIテーブルの地物をGeoJSONとして返す。GeoJSON-FeatureCollectionはSQLで生成
     """
 
@@ -102,9 +106,9 @@ def get_pois_sql2(bbox: str, conn=Depends(get_connection)):
         cur.execute(
             """SELECT json_build_object(
                 'type', 'FeatureCollection',
-                'features', COALESCE(json_agg(ST_AsGeoJSON(poi.*)::json), '[]'::json)
+                'features', COALESCE(json_agg(ST_AsGeoJSON(meizan.*)::json), '[]'::json)
             )
-            FROM poi 
+            FROM meizan
             WHERE geom && ST_MakeEnvelope(%(minx)s, %(miny)s, %(maxx)s, %(maxy)s, 4326)
             LIMIT 1000""",
             {
@@ -126,8 +130,8 @@ def create_poi(data: PoiCreate, conn=Depends(get_connection)):
 
     with conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO poi (name, geom) VALUES (%s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))",
-            (data.name, data.longitude, data.latitude),
+            "INSERT INTO public.meizan (geom, name, elevation, count) VALUES (ST_SetSRID(ST_MakePoint(%s, %s), 6668), %s, %s, %s)",
+            (data.longitude, data.latitude, data.name, data.elevation, data.count),
         )
         conn.commit()
 
@@ -138,10 +142,10 @@ def create_poi(data: PoiCreate, conn=Depends(get_connection)):
 
         # 作成した地物の情報を取得
         cur.execute(
-            "SELECT id, name, ST_X(geom) as longitude, ST_Y(geom) as latitude FROM poi WHERE id = %s",
+            "SELECT id, name, ST_X(geom) as longitude, ST_Y(geom) as latitude, elevation, count FROM meizan WHERE id = %s",
             (_id,),
         )
-        id, name, longitude, latitude = cur.fetchone()
+        id, name, longitude, latitude, elevation, count = cur.fetchone()
 
     # 作成した地物をGeoJSONとして返す
     return {
@@ -153,6 +157,8 @@ def create_poi(data: PoiCreate, conn=Depends(get_connection)):
         "properties": {
             "id": id,
             "name": name,
+            "elevation": elevation,
+            "count": count,
         },
     }
 
@@ -163,7 +169,7 @@ def delete_poi(id: int, conn=Depends(get_connection)):
     PoIテーブルの地物を削除
     """
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM poi WHERE id = %s", (id,))
+        cur.execute("DELETE FROM meizan WHERE id = %s", (id,))
         conn.commit()
 
     return Response(status_code=204)  # 204 No Contentを返す
@@ -176,26 +182,28 @@ def update_poi(poi_id: int, data: PoiUpdate, conn=Depends(get_connection)):
     """
     with conn.cursor() as cur:
         # 更新対象の地物が存在するか確認
-        cur.execute("SELECT id FROM poi WHERE id = %s", (poi_id,))
+        cur.execute("SELECT id FROM meizan WHERE id = %s", (poi_id,))
         if not cur.fetchone():
             return Response(status_code=404)
 
         # 更新
         cur.execute(
-            """UPDATE poi SET
+            """UPDATE meizan SET
                 name = COALESCE(%s, name),
-                geom = ST_SetSRID(ST_MakePoint(COALESCE(%s, ST_X(geom)), COALESCE(%s, ST_Y(geom))), 4326)
+                geom = ST_SetSRID(ST_MakePoint(COALESCE(%s, ST_X(geom)), COALESCE(%s, ST_Y(geom))), 6668),
+                elevation = COALESCE(%s, elevation),
+                count = COALESCE(%s, count),
                 WHERE id = %s""",
-            (data.name, data.longitude, data.latitude, poi_id),
+            (data.name, data.longitude, data.latitude, data.elevation, data.count, poi_id),
         )
         conn.commit()
 
         # 更新した地物の情報を取得
         cur.execute(
-            "SELECT id, name, ST_X(geom) as longitude, ST_Y(geom) as latitude FROM poi WHERE id = %s",
+            "SELECT id, name, ST_X(geom) as longitude, ST_Y(geom) as latitude, elevation, count FROM meizan WHERE id = %s",
             (poi_id,),
         )
-        _id, name, longitude, latitude = cur.fetchone()
+        _id, name, longitude, latitude, elevation, count = cur.fetchone()
 
     # 更新した地物をGeoJSONとして返す
     return {
@@ -207,6 +215,8 @@ def update_poi(poi_id: int, data: PoiUpdate, conn=Depends(get_connection)):
         "properties": {
             "id": _id,
             "name": name,
+            "elevation": elevation,
+            "count": count,
         },
     }
 
@@ -219,11 +229,11 @@ def get_pois_tiles(z: int, x: int, y: int, conn=Depends(get_connection)):
     with conn.cursor() as cur:
         cur.execute(
             """WITH mvtgeom AS (
-                SELECT ST_AsMVTGeom(ST_Transform(geom, 3857), ST_TileEnvelope(%(z)s, %(x)s, %(y)s)) AS geom, id, name
-                FROM poi
+                SELECT ST_AsMVTGeom(ST_Transform(geom, 3857), ST_TileEnvelope(%(z)s, %(x)s, %(y)s)) AS geom, ogc_fid AS id, name
+                FROM meizan
                 WHERE ST_Transform(geom, 3857) && ST_TileEnvelope(%(z)s, %(x)s, %(y)s)
             )
-            SELECT ST_AsMVT(mvtgeom.*, 'poi', 4096, 'geom')
+            SELECT ST_AsMVT(mvtgeom.*, 'meizan', 4096, 'geom')
             FROM mvtgeom;""",
             {"z": z, "x": x, "y": y},
         )

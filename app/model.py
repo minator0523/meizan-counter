@@ -4,8 +4,6 @@ from pydantic import BaseModel
 
 
 class PoiCreate(BaseModel):
-    id: int
-    no: int
     name: str
     elevation: float
     count: int
@@ -14,8 +12,6 @@ class PoiCreate(BaseModel):
 
 
 class PoiUpdate(BaseModel):
-    id: Optional[int] = None
-    no: Optional[int] = None
     name: Optional[str] = None
     elevation: Optional[float] = None
     count: Optional[int] = None

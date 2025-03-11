@@ -2,7 +2,8 @@
 <html>
     <head>
         <meta charset="utf-8" />
-        <title>05-vector-crud</title>
+        <title>meizan-counter</title>
+        <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
         <!-- maplibre gl js-->
         <script src="https://unpkg.com/maplibre-gl@^4.0/dist/maplibre-gl.js"></script>
         <link
@@ -23,15 +24,11 @@
         </style>
     </head>
     <body>
-        <div style="display: flex">
-            <div style="height: 100vh; width: 50%">
-                MapboxVectorTile
-                <div id="map-mvt" style="height: 95%"></div>
-            </div>
-            <div style="height: 100vh; width: 50%">
-                GeoJSON
-                <div id="map-geojson" style="height: 95%"></div>
-            </div>
+        <div id="map" style="height: 80%"></div>
+        <div class="info" id="information">
+            山名：<br>
+            標高[m]：<br>
+            <label>カウント：<input type="number" size="40" value="3"></label>
         </div>
         <script>
             /**
@@ -39,7 +36,9 @@
              */
 
             let popup = null; // ポップアップのインスタンスを保持する変数
+            let mountainId = null;
 
+            /*
             const createPoi = async ({ longitude, latitude, name }) => {
                 const response = await fetch('http://localhost:3000/pois', {
                     method: 'POST',
@@ -87,14 +86,11 @@
                     popup = null;
                 }
             };
+            */
 
-            /**
-             * GeoJSONでレスポンスされるエンドポイント向けの実装
-             */
-
-            const mapGeojson = new maplibregl.Map({
+            const map = new maplibregl.Map({
                 hash: true,
-                container: 'map-geojson', // container id
+                container: 'map', // container id
                 renderWorldCopies: false,
                 style: {
                     version: 8,
@@ -109,6 +105,7 @@
                         },
                         poi: {
                             type: 'geojson',
+                            "promoteId": "id",
                             data: {
                                 type: 'FeatureCollection',
                                 features: [],
@@ -126,8 +123,19 @@
                             type: 'circle',
                             source: 'poi',
                             paint: {
-                                'circle-color': 'blue',
-                                'circle-radius': 10,
+                                //'circle-color': 'blue',
+                                'circle-color': [
+                                    'case',
+                                    ['boolean', ['feature-state', 'hover'], false],
+                                    'red',
+                                    'blue',
+                                ],
+                                'circle-radius': [
+                                    'case',
+                                    ['boolean', ['feature-state', 'hover'], false],
+                                    30,
+                                    10,
+                                ],
                                 'circle-stroke-width': 2,
                                 'circle-stroke-color': 'white',
                             },
@@ -137,7 +145,7 @@
             });
             const loadPoi = async () => {
                 // 地図の範囲を取得
-                const bounds = mapGeojson.getBounds();
+                const bounds = map.getBounds();
                 const minx = Math.max(bounds.getWest(), -179);
                 const miny = Math.max(bounds.getSouth(), -85);
                 const maxx = Math.min(bounds.getEast(), 179);
@@ -147,35 +155,68 @@
                     `http://localhost:3000/pois_sql2?bbox=${minx},${miny},${maxx},${maxy}`,
                 );
                 const data = await response.json();
-                mapGeojson.getSource('poi').setData(data);
+                map.getSource('poi').setData(data);
             };
-            mapGeojson.on('load', async () => await loadPoi()); // 初期ロード
-            mapGeojson.on('moveend', async () => await loadPoi()); // マップの移動完了時に画面範囲の地物を取得
-            mapGeojson.on('click', (e) => {
+            map.on('load', async () => await loadPoi()); // 初期ロード
+            map.on('load', async () => await clearInfo()); // 初期ロード
+            map.on('moveend', async () => await loadPoi()); // マップの移動完了時に画面範囲の地物を取得
+            map.on('click', (e) => {
                 if (popup !== null) {
                     // ポップアップが表示されている場合は削除するだけ
-                    clearPopup();
+                    clearInfo();
+                    map.setFeatureState(
+                        {source: 'poi', id: mountainId},
+                        {hover: false}
+                    );
+                    mountainId = null;
                     return;
                 }
 
                 // クリックした位置に地物があるかどうかを取得
-                const features = mapGeojson.queryRenderedFeatures(e.point, {
+                const features = map.queryRenderedFeatures(e.point, {
                     layers: ['poi'],
                 });
 
                 if (features.length === 0) {
+                    map.setFeatureState(
+                        {source: 'poi', id: mountainId},
+                        {hover: false}
+                    );
+                    return ;
                     // クリックした位置に地物がない場合
+
+                    /*
                     const longitude = e.lngLat.lng;
                     const latitude = e.lngLat.lat;
+
                     const name = prompt(
                         'PoIを作成します 名前を入力してください',
                     );
                     if (name === null) return;
                     createPoi({ longitude, latitude, name });
+                    */
                 } else {
                     // 地物がある場合
                     const feature = features[0];
+                    name = feature.properties.name;
+                    mountainId = feature.properties.id
+                    count = feature.properties.count
+                    elevation = feature.properties.elevation
+                    map.setFeatureState(
+                        {source: 'poi', id: mountainId},
+                        {hover: true}
+                    );
+                    var informationTag = document.getElementById("information");
+                    informationTag.innerHTML = 
+                        `
+                            山名：<b>${name}</b><br>
+                            標高[m]：<b>${elevation}</b><br>
+                            <label>カウント：<input type="number" size="40" value="${count}"></label><br>
+    
+                        `;
+                    showInfo();
 
+                    /*
                     // タイトル表示エリア
                     const nameInput = document.createElement('input');
                     nameInput.type = 'text';
@@ -222,131 +263,33 @@
                         .setLngLat(feature.geometry.coordinates)
                         .setDOMContent(div)
                         .setMaxWidth('400px')
-                        .addTo(mapGeojson);
+                        .addTo(map);
+                    */
                 }
             });
 
-            /**
-             * MVTでレスポンスされるエンドポイント向けの実装
-             */
 
-            const mapMvt = new maplibregl.Map({
-                hash: true,
-                container: 'map-mvt', // container id
-                renderWorldCopies: false,
-                style: {
-                    version: 8,
-                    sources: {
-                        gsistd: {
-                            type: 'raster',
-                            tiles: [
-                                'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
-                            ],
-                            tileSize: 256,
-                            attribution: '地理院タイル',
-                        },
-                        poimvt: {
-                            type: 'vector',
-                            tiles: [
-                                'http://localhost:3000/pois/tiles/{z}/{x}/{y}.pbf',
-                            ],
-                        },
-                    },
-                    layers: [
-                        {
-                            id: 'gsistd',
-                            type: 'raster',
-                            source: 'gsistd',
-                        },
-                        {
-                            id: 'poi',
-                            type: 'circle',
-                            source: 'poimvt',
-                            'source-layer': 'poi',
-                            paint: {
-                                'circle-color': 'red',
-                                'circle-radius': 10,
-                                'circle-stroke-width': 2,
-                                'circle-stroke-color': 'white',
-                            },
-                        },
-                    ],
-                },
-            });
-            const reloadPoi = () => {
-                const source = mapMvt.getSource('poimvt');
-                // タイルを最読み込みするために、タイルURLを再設定する
-                source.setTiles([
-                    'http://localhost:3000/pois/tiles/{z}/{x}/{y}.pbf',
-                ]);
+            const clearInfo = () => {
+                $('.info').hide();
+                if (popup) {
+                    popup = null;
+                }
             };
-            mapMvt.on('click', (e) => {
-                if (popup !== null) {
-                    clearPopup();
-                    return;
+
+
+            const showInfo = () => {
+                $('.info').show();
+                if (!popup) {
+                    popup = true;
                 }
+            };
 
-                // クリックした位置に地物があるかどうかを取得
-                const features = mapMvt.queryRenderedFeatures(e.point, {
-                    layers: ['poi'],
-                });
-
-                if (features.length === 0) {
-                    // クリックした位置に地物がない場合
-                    const longitude = e.lngLat.lng;
-                    const latitude = e.lngLat.lat;
-                    const name = prompt(
-                        'PoIを作成します 名前を入力してください',
-                    );
-                    if (name === null) return;
-                    createPoi({ longitude, latitude, name });
-                } else {
-                    // 地物がある場合
-                    const feature = features[0];
-
-                    // タイトル表示エリア
-                    const nameInput = document.createElement('input');
-                    nameInput.type = 'text';
-                    nameInput.value = feature.properties.name;
-
-                    // 更新ボタン
-                    const updateButton = document.createElement('button');
-                    updateButton.textContent = '更新';
-                    updateButton.onclick = async () => {
-                        await updatePoi(feature.properties.id, nameInput.value);
-                        clearPopup();
-                    };
-
-                    // 削除ボタン
-                    const deleteButton = document.createElement('button');
-                    deleteButton.textContent = '削除';
-                    deleteButton.onclick = async () => {
-                        if (!confirm('削除しますか？')) return;
-                        await deletePoi(feature.properties.id);
-                        clearPopup();
-                    };
-
-                    // ポップアップに表示する要素を作成
-                    const div = document.createElement('div');
-                    div.style = 'display: flex;';
-                    div.appendChild(nameInput);
-                    div.appendChild(updateButton);
-                    div.appendChild(deleteButton);
-
-                    // ポップアップにUIをセットして地図上に表示
-                    popup = new maplibregl.Popup()
-                        .setLngLat(feature.geometry.coordinates)
-                        .setDOMContent(div)
-                        .setMaxWidth('400px')
-                        .addTo(mapMvt);
-                }
-            });
-
-            // 連動処理
-            mapGeojson.on('move', () => {
-                mapMvt.panTo(mapGeojson.getCenter(), { duration: 0 });
-                mapMvt.setZoom(mapGeojson.getZoom());
-            });
         </script>
+        <style>
+            .info {
+                bottom: 30px;
+                position: absolute;
+            }
+        </style>
     </body>
 </html>

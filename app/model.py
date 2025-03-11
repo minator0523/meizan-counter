@@ -12,8 +12,16 @@ class PoiCreate(BaseModel):
 
 
 class PoiUpdate(BaseModel):
+    name: str
+    elevation: float
+    count: int
+    longitude: float
+    latitude: float
+
+    '''
     name: Optional[str] = None
     elevation: Optional[float] = None
     count: Optional[int] = None
     longitude: Optional[float] = None
     latitude: Optional[float] = None
+    '''

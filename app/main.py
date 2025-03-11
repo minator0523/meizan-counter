@@ -192,7 +192,7 @@ def update_poi(poi_id: int, data: PoiUpdate, conn=Depends(get_connection)):
                 name = COALESCE(%s, name),
                 geom = ST_SetSRID(ST_MakePoint(COALESCE(%s, ST_X(geom)), COALESCE(%s, ST_Y(geom))), 6668),
                 elevation = COALESCE(%s, elevation),
-                count = COALESCE(%s, count),
+                count = COALESCE(%s, count)
                 WHERE id = %s""",
             (data.name, data.longitude, data.latitude, data.elevation, data.count, poi_id),
         )
@@ -219,6 +219,7 @@ def update_poi(poi_id: int, data: PoiUpdate, conn=Depends(get_connection)):
             "count": count,
         },
     }
+
 
 
 @app.get("/pois/tiles/{z}/{x}/{y}.pbf")

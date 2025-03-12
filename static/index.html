@@ -29,11 +29,9 @@
             山名：<br>
             標高[m]：<br>
             <label>カウント：<input type="number" size="40" value="3"></label>
+            <button id="updateBtn" type="button" >更新</button>
         </div>
         <script>
-            /**
-             * 共通処理
-             */
 
             let popup = null; // ポップアップのインスタンスを保持する変数
             let mountainId = null;
@@ -211,8 +209,8 @@
                         `
                             山名：<b>${name}</b><br>
                             標高[m]：<b>${elevation}</b><br>
-                            <label>カウント：<input type="number" size="40" value="${count}"></label><br>
-    
+                            <label>カウント：<input type="number" size="40" value="${count}"></label>
+                            <button id="updateBtn" type="button" >更新</button>
                         `;
                     showInfo();
 

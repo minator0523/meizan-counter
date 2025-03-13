@@ -1,0 +1,57 @@
+/* Maplibre GS JS */
+body {
+    margin: 0;
+    padding: 0;
+}
+#map {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+}
+
+/* 山の情報 */
+.info {
+    bottom: 30px;
+    position: absolute;
+    background: white;
+}
+
+/* 凡例 */
+.legend {
+    position: absolute;
+    bottom: 30px;
+    right: 0px;
+    background: white;
+}
+
+/*リスト本体の設定*/
+li {
+    list-style-type: none;
+    margin: 2px;
+    padding: 0.5em 0.5em 0.5em 0.5em;
+    width: 100px;
+}
+
+/*リストの各要素に前要素として■を付ける*/
+li:before {
+    content: "";
+    display: inline-block;
+    height: 15px;
+    width: 15px;
+    margin-right: 5px;
+}
+
+/*リストの各要素の前要素のデザインを設定*/
+li.color1:before {
+    background: rgba(100,100,100,0.8);
+}
+li.color2:before {
+    background: rgba(255,241,0,0.8);
+}
+li.color3:before {
+    background: rgba(243,152,0,0.8);
+}
+li.color4:before {
+    background: rgba(230,0,18,0.8);
+}

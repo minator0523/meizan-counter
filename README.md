@@ -40,3 +40,6 @@ meizan-counter/
     ├── main.js
     └── style.css
 ```
+
+## データの出典（各山頂の位置）
+* [日本百選と座標値](https://100sen.cyber-ninja.jp/#website)

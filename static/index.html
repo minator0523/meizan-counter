@@ -11,6 +11,7 @@
             href="https://unpkg.com/maplibre-gl@^4.0/dist/maplibre-gl.css"
         />
         <style>
+            /* Maplibre GS JS */
             body {
                 margin: 0;
                 padding: 0;
@@ -21,48 +22,77 @@
                 bottom: 0;
                 width: 100%;
             }
+
+            /* 山の情報 */
+            .info {
+                bottom: 30px;
+                position: absolute;
+                background: white;
+            }
+            
+            /* 凡例 */
+            .legend {
+                position: absolute;
+                bottom: 30px;
+                right: 0px;
+                background: white;
+            }
+
+            /*リスト本体の設定*/
+            li {
+                list-style-type: none;
+                margin: 2px;
+                padding: 0.5em 0.5em 0.5em 0.5em;
+                width: 100px;
+            }
+
+            /*リストの各要素に前要素として■を付ける*/
+            li:before {
+                content: "";
+                display: inline-block;
+                height: 15px;
+                width: 15px;
+                margin-right: 5px;
+            }
+
+            /*リストの各要素の前要素のデザインを設定*/
+            li.color1:before {
+                background: rgba(100,100,100,0.8);
+            }
+            li.color2:before {
+                background: rgba(255,241,0,0.8);
+            }
+            li.color3:before {
+                background: rgba(243,152,0,0.8);
+            }
+            li.color4:before {
+                background: rgba(230,0,18,0.8);
+            }
         </style>
     </head>
     <body>
-        <div id="map" style="height: 80%"></div>
+        <div id="map" style="height: 100%"></div>
         <div class="info" id="information">
             山名：<br>
             標高[m]：<br>
             <label>カウント：<input type="number" size="40" value="3"></label>
             <button id="updateBtn" type="button" >更新</button>
         </div>
+        <div class="legend">
+            <p><b>カウントの凡例</b></p>
+            <ul>
+                <li class="color1">0</li>
+                <li class="color2">1</li>
+                <li class="color3">2</li>
+                <li class="color4">3~</li>
+            </ul>
+        </div>
         <script>
 
-            let popup = null; // ポップアップのインスタンスを保持する変数
+            let informationStateId = null; // ポップアップのインスタンスを保持する変数
             let mountainId = null;
 
-            /*
-            const createPoi = async ({ longitude, latitude, name }) => {
-                const response = await fetch('http://localhost:3000/pois', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ longitude, latitude, name }),
-                });
-                await loadPoi();
-                reloadPoi();
-                alert('登録しました');
-            };
-
-            const deletePoi = async (id) => {
-                const response = await fetch(
-                    `http://localhost:3000/pois/${id}`,
-                    {
-                        method: 'DELETE',
-                    },
-                );
-                await loadPoi();
-                reloadPoi();
-                alert('削除しました');
-            };
-
-            const updatePoi = async (id, name) => {
+            const updatePoi = async (id, name, longitude, latitude, elevation, count) => {
                 const response = await fetch(
                     `http://localhost:3000/pois/${id}`,
                     {
@@ -70,21 +100,20 @@
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify({ name }),
+                        body: JSON.stringify({ 
+                            "longitude": longitude,
+                            "latitude": latitude,
+                            "name": name,
+                            "elevation": elevation, 
+                            "count": count,
+                        }),
                     },
                 );
                 await loadPoi();
-                reloadPoi();
+                //reloadPoi();
                 alert('更新しました');
             };
 
-            const clearPopup = () => {
-                if (popup) {
-                    popup.remove();
-                    popup = null;
-                }
-            };
-            */
 
             const map = new maplibregl.Map({
                 hash: true,
@@ -131,11 +160,16 @@
                                 'circle-radius': [
                                     'case',
                                     ['boolean', ['feature-state', 'hover'], false],
-                                    30,
-                                    10,
+                                    20.0,
+                                    7.5,
                                 ],
-                                'circle-stroke-width': 2,
-                                'circle-stroke-color': 'white',
+                                'circle-stroke-width': [
+                                    'case',
+                                    ['boolean', ['feature-state', 'hover'], false],
+                                    4,
+                                    2,
+                                ],
+                                'circle-stroke-color': 'black',
                             },
                         },
                     ],
@@ -159,13 +193,11 @@
             map.on('load', async () => await clearInfo()); // 初期ロード
             map.on('moveend', async () => await loadPoi()); // マップの移動完了時に画面範囲の地物を取得
             map.on('click', (e) => {
-                if (popup !== null) {
+                if (informationStateId !== null) {
                     // ポップアップが表示されている場合は削除するだけ
+                    mountainHoverOff(mountainId);
                     clearInfo();
-                    map.setFeatureState(
-                        {source: 'poi', id: mountainId},
-                        {hover: false}
-                    );
+
                     mountainId = null;
                     return;
                 }
@@ -176,118 +208,79 @@
                 });
 
                 if (features.length === 0) {
-                    map.setFeatureState(
-                        {source: 'poi', id: mountainId},
-                        {hover: false}
-                    );
+                    clearInfo();
+                    mountainHoverOff(mountainId);
                     return ;
-                    // クリックした位置に地物がない場合
 
-                    /*
-                    const longitude = e.lngLat.lng;
-                    const latitude = e.lngLat.lat;
-
-                    const name = prompt(
-                        'PoIを作成します 名前を入力してください',
-                    );
-                    if (name === null) return;
-                    createPoi({ longitude, latitude, name });
-                    */
                 } else {
                     // 地物がある場合
                     const feature = features[0];
-                    name = feature.properties.name;
+                    const name = feature.properties.name;
+                    let count = feature.properties.count
+                    const elevation = feature.properties.elevation
+                    const longitude = e.lngLat.lng;
+                    const latitude = e.lngLat.lat;
                     mountainId = feature.properties.id
-                    count = feature.properties.count
-                    elevation = feature.properties.elevation
-                    map.setFeatureState(
-                        {source: 'poi', id: mountainId},
-                        {hover: true}
-                    );
+                    mountainHoverOn(mountainId);
                     var informationTag = document.getElementById("information");
                     informationTag.innerHTML = 
                         `
                             山名：<b>${name}</b><br>
                             標高[m]：<b>${elevation}</b><br>
-                            <label>カウント：<input type="number" size="40" value="${count}"></label>
+                            <label>カウント：<input id=countForm type="number" size="40" value="${count}"></label>
                             <button id="updateBtn" type="button" >更新</button>
                         `;
                     showInfo();
 
-                    /*
-                    // タイトル表示エリア
-                    const nameInput = document.createElement('input');
-                    nameInput.type = 'text';
-                    nameInput.value = feature.properties.name;
-
-                    // 標高表示エリア
-                    const elevationInput = document.createElement('input');
-                    elevationInput.type = 'number';
-                    elevationInput.value = feature.properties.elevation;
-
-                    // カウント表示エリア
-                    const countInput = document.createElement('input');
-                    countInput.type = 'number';
-                    countInput.value = feature.properties.count;
-
                     // 更新ボタン
-                    const updateButton = document.createElement('button');
-                    updateButton.textContent = '更新';
-                    updateButton.onclick = async () => {
-                        await updatePoi(feature.properties.id, nameInput.value);
-                        clearPopup();
+                    updateElement = document.getElementById('updateBtn'); 
+                    countElement = document.getElementById('countForm'); 
+
+                    updateElement.onclick = async () => {
+                        count = countElement.value;
+                        if (!confirm('更新しますか？')) return;
+                        await updatePoi(feature.properties.id, name, longitude, latitude, elevation, count);
                     };
 
-                    // 削除ボタン
-                    const deleteButton = document.createElement('button');
-                    deleteButton.textContent = '削除';
-                    deleteButton.onclick = async () => {
-                        if (!confirm('削除しますか？')) return;
-                        await deletePoi(feature.properties.id);
-                        clearPopup();
-                    };
-
-                    // ポップアップに表示する要素を作成
-                    const div = document.createElement('div');
-                    div.style = 'display: flex;';
-                    div.appendChild(nameInput);
-                    div.appendChild(elevationInput);
-                    div.appendChild(countInput);
-                    div.appendChild(updateButton);
-                    div.appendChild(deleteButton);
-
-                    // ポップアップにUIをセットして地図上に表示
-                    popup = new maplibregl.Popup()
-                        .setLngLat(feature.geometry.coordinates)
-                        .setDOMContent(div)
-                        .setMaxWidth('400px')
-                        .addTo(map);
-                    */
                 }
             });
 
 
+            // 山の情報をクリア
             const clearInfo = () => {
                 $('.info').hide();
-                if (popup) {
-                    popup = null;
+                if (informationStateId) {
+                    informationStateId = null;
                 }
             };
 
 
+            // 山の情報を表示
             const showInfo = () => {
                 $('.info').show();
-                if (!popup) {
-                    popup = true;
+                if (!informationStateId) {
+                    informationStateId = true;
                 }
+            };
+
+
+            // 山頂の強調表示ON
+            const mountainHoverOn = (mountainId) => {
+                map.setFeatureState(
+                    {source: 'poi', id: mountainId},
+                    {hover: true}
+                );
+            };
+
+
+            // 山頂の強調表示OFF
+            const mountainHoverOff = (mountainId) => {
+                map.setFeatureState(
+                    {source: 'poi', id: mountainId},
+                    {hover: false}
+                );
             };
 
         </script>
-        <style>
-            .info {
-                bottom: 30px;
-                position: absolute;
-            }
-        </style>
     </body>
 </html>
